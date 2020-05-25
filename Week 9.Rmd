@@ -1,0 +1,116 @@
+---
+title: "Week 9"
+author: "Jaymeen Gandhi"
+date: "April 4, 2020"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r}
+require(tidyverse)
+```
+
+```{r}
+projects = read_csv('C:/Users/jayme/Downloads/projects.csv')
+projects = projects %>% arrange(desc(comments))
+projects = projects %>% filter(comments<10000)
+projects
+```
+
+```{r}
+f = comments ~ duration + goal + description.length
+```
+
+```{r}
+projects %>% summarise(mean(comments),var(comments))
+```
+
+##Since the var is very high than mean we can say that the distribution is overspread. So this model will be quasi poisson.
+##If the variance and mean are equal than use poissons.
+
+```{r}
+model = glm(f,data = projects,family = quasipoisson)
+summary(model)
+```
+
+## Since this model does nor have any r-squared value we have to check whether this model is a good fit for prediction or no.
+
+##We will see that as follows
+```{r}
+require(broom)
+
+glance(model) %>% summarise(pseudoR2=1-deviance/null.deviance)
+```
+
+##Now we will see model prediction and evaluate that prediction
+
+```{r}
+set.seed(1234)
+training_data = projects %>% sample_frac(size = 0.7)
+testing_data = anti_join(projects,training_data, by= 'id')
+```
+
+```{r}
+model_l = glm(f,data = training_data,family = gaussian)
+model_p= glm(f,data = training_data,family = poisson)
+model_qp = glm(f,data = training_data, family = quasipoisson)
+
+models = list(model_l,model_p,model_qp)
+
+
+```
+
+```{r}
+map_dfr(models, ~glance(.x) %>% summarise(pseudoR2=1-deviance/null.deviance))
+```
+
+
+########## GAM Models ###########
+
+```{r}
+#install.packages('mgcv')
+require(mgcv)
+require(modelr)
+```
+```{r}
+mtcars %>% head()
+```
+
+```{r}
+gam_model = gam(mpg ~ s(disp), data = mtcars)
+lm_model = lm(mpg ~ disp , data = mtcars)
+lm_t_model = lm(mpg~I(1/disp^2),data = mtcars)
+
+models=list(gam_model,lm_model,lm_t_model)
+
+(rsquared=map_dbl(models,~rsquare(.x,mtcars)))
+```
+
+```{r}
+mtcars = mtcars %>% mutate(id = row_number())
+set.seed(1234)
+training_data = mtcars %>% sample_frac(size = 0.7)
+testing_data = anti_join(mtcars,training_data, by= 'id')
+```
+
+```{r}
+gam_model = gam(mpg ~ s(disp), data = training_data)
+lm_model = lm(mpg ~ disp , data = training_data)
+lm_t_model = lm(mpg~I(1/disp^2),data = training_data)
+
+models=list(gam_model,lm_model,lm_t_model)
+
+(rmses = map_dbl(models,~rmse(.x,testing_data)))
+```
+
+```{r}
+tibble(model=c("gam_model","lm_model","lm_t_model"),rsquared,rmses) %>% mutate_if(is.numeric,~round(.x, 2))
+```
+
+
+
+
+
+
+
